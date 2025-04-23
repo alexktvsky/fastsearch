@@ -1,0 +1,49 @@
+services:
+  master-service:
+    build:
+      context: ./fastsearch-master-service
+    container_name: master-service
+    environment:
+      FASTSEARCH_WORKERS: ${",".join([f"http://worker-service-{i}:8080" for i in range(replicas)])}
+      SPRING_PROFILES_ACTIVE: production
+    ports:
+      - 8080:8080
+    restart: always
+    depends_on:
+% for i in range(replicas):
+      - worker-service-${i}
+% endfor
+
+% for i in range(replicas):
+  worker-service-${i}:
+    build:
+      context: ./fastsearch-worker-service
+    container_name: worker-service-${i}
+    environment:
+      FASTSEARCH_WORKER_ID: ${i}
+      MONGODB_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb-${i}:${MONGO_PORT}/db?authSource=admin
+      SPRING_PROFILES_ACTIVE: production
+    restart: always
+    depends_on:
+      - mongodb-${i}
+% endfor
+
+% for i in range(replicas):
+  mongodb-${i}:
+    image: mongo:latest
+    container_name: mongodb-${i}
+    ports:
+      -  ${port(27001, i)}:${MONGO_PORT}
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongodb-${i}-data:/data/db
+      - ./fastsearch-worker-service/src/main/resources/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+% endfor
+
+volumes:
+% for i in range(replicas):
+  mongodb-${i}-data:
+% endfor
